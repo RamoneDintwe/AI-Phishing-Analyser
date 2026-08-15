@@ -1,0 +1,4 @@
+sample.eml
+.vscode/
+__pycache__/
+*.pyc 

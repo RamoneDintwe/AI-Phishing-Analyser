@@ -75,6 +75,8 @@ BRAND_DOMAINS = {
     "outsurance": "outsurance.co.za",
     "bonitas": "bonitas.co.za",
     "gems": "gems.gov.za",
+    "fsca": "fsca.org.za",
+    "transunion": "transunion.com"
 }
 
 DANGEROUS_EXTENSIONS = {

@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 URL_RE = re.compile(r'https?://[^\s<>"\')]+')
 IP_URL_RE = re.compile(r'https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}')
 SHORTENERS = {"bit.ly", "tinyurl.com", "t.co", "goo.gl", "ow.ly", "is.gd"}
-
+CATEGORY_CAP = 50  # Maximum score per category to prevent over-weighting
+AMBIGUOUS_BRAND_KEYS = {"rain", "gems", "visa", "apple"}
 BRAND_DOMAINS = {
     "nedbank": "nedbank.co.za",
     "fnb": "fnb.co.za",
@@ -132,6 +133,7 @@ def check_auth_results(msg):
     findings = []
     auth = msg.get("Authentication-Results", "")
     if not auth:
+        findings.append(("Authentication-Results header missing entirely", 5))
         return findings
     for mech in ("spf", "dkim", "dmarc"):
         m = re.search(rf"{mech}=(\w+)", auth, re.IGNORECASE)
@@ -171,9 +173,11 @@ def check_typosquat_domain(msg):
     domain = _sender_domain(msg)
     if not domain:
         return findings
+    if domain in BRAND_DOMAINS.values() or any(
+        domain.endswith("." + real_domain) for real_domain in BRAND_DOMAINS.values()
+    ):
+        return findings
     for brand, real_domain in BRAND_DOMAINS.items():
-        if domain == real_domain:
-            continue
         similarity = difflib.SequenceMatcher(None, domain, real_domain).ratio()
         if similarity > 0.80:
             findings.append(
@@ -185,12 +189,23 @@ def check_typosquat_domain(msg):
 def check_subdomain_abuse(msg):
     findings = []
     domain = _sender_domain(msg)
-    normalized = domain.replace(".", "").replace("-", "")
+    if not domain:
+        return findings
+    tokens = re.split(r"[.\-]", domain)
     for brand, real_domain in BRAND_DOMAINS.items():
-        brand_key = brand.replace(" ", "")
-        if brand_key in normalized and domain != real_domain:
+        if domain == real_domain or domain.endswith("." + real_domain):
+            continue
+        brand_key = brand.replace(" ","")
+        if any(
+            token == brand_key
+            or (
+                brand_key not in AMBIGUOUS_BRAND_KEYS
+                and (token.startswith(brand_key) or token.endswith(brand_key))
+            )
+            for token in tokens
+        ):
             findings.append(
-                (f"Domain '{domain}' contains brand '{brand}' but isn't the real domain — possible subdomain abuse", 30)
+                (f"Domain '{domain}' contains brand '{brand}' but isn't the real domain - possible subdomain abuse", 30)
             )
     return findings
 
@@ -237,17 +252,23 @@ def analyse(path):
     subject = msg.get("Subject", "")
     body = get_body(msg)
 
-    findings = []
-    findings += check_auth_results(msg)
-    findings += check_from_replyto_mismatch(msg)
-    findings += check_display_name(msg)
-    findings += check_typosquat_domain(msg)
-    findings += check_subdomain_abuse(msg)
-    findings += check_urls(body)
-    findings += check_urgency_language(subject, body)
-    findings += check_attachments(msg)
+    categories = [
+        check_auth_results(msg),
+        check_from_replyto_mismatch(msg),
+        check_display_name(msg),
+        check_typosquat_domain(msg),
+        check_subdomain_abuse(msg),
+        check_urls(body),
+        check_urgency_language(subject, body),
+        check_attachments(msg),
+    ]
 
-    score = min(sum(w for _, w in findings), 100)
+    findings = []
+    score = 0
+    for cat_findings in categories:
+        findings += cat_findings
+        score += min(sum(w for _, w in cat_findings), CATEGORY_CAP)
+    score = min(score, 100)
 
     if score >= 60:
         verdict = "HIGH RISK"

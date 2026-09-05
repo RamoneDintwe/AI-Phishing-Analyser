@@ -1,11 +1,7 @@
 """
 Test suite for AI Phishing Analyser main.py
-
-Two xfail tests below are NOT broken tests — they document real bugs
-found in main.py during review. Do not "fix" them by weakening the
-assertion; fix main.py instead (see the reason= string on each).
 """
-import pytest
+
 
 from main import (
     analyse,
@@ -45,29 +41,26 @@ def test_typosquat_flags_close_domain(msg_factory):
     assert findings, "nedbnk.co.za is a near-miss of nedbank.co.za — should flag"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG in check_typosquat_domain: the 0.80 similarity threshold is "
-        "too loose for a 55-brand list containing short, similar SA "
-        "institution domains. Confirmed cross-brand collisions: "
-        "nedbank.co.za<->tymebank.co.za (0.81), sars.gov.za<->sassa.gov.za "
-        "(0.87), sars.gov.za<->saps.gov.za (0.91), sassa.gov.za<->saps.gov.za "
-        "(0.87). A GENUINE email from SARS will flag itself as impersonating "
-        "SASSA or SAPS, and vice versa — exactly the three institutions this "
-        "project's fixtures are built around. Fix: raise the threshold "
-        "(0.90+), or skip comparison entirely when domain is itself a known "
-        "real_domain value in BRAND_DOMAINS."
-    ),
-)
 def test_typosquat_no_flag_for_real_domain(msg_factory):
     msg = msg_factory('"Nedbank" <alerts@nedbank.co.za>')
     findings = check_typosquat_domain(msg)
     assert findings == [], "The real domain should never flag itself"
 
 
+def test_typosquat_no_flag_for_subdomain_of_real_domain(msg_factory):
+    msg = msg_factory('"FNB" <notifications@www.fnb.co.za>')
+    findings = check_typosquat_domain(msg)
+    assert findings == [], "www.fnb.co.za is a subdomain of fnb.co.za, not a typosquat"
+
+
+def test_typosquat_no_flag_sars_domain(msg_factory):
+    msg = msg_factory('"SARS eFiling" <refunds@sars.gov.za>')
+    findings = check_typosquat_domain(msg)
+    assert findings == [], "Genuine SARS domain must not collide with SASSA/SAPS"
+
+
 # ---------------------------------------------------------------------------
-# check_subdomain_abuse — includes two documented bugs (xfail)
+# check_subdomain_abuse
 # ---------------------------------------------------------------------------
 
 def test_subdomain_abuse_flags_genuine_abuse(msg_factory):
@@ -76,40 +69,20 @@ def test_subdomain_abuse_flags_genuine_abuse(msg_factory):
     assert findings, "Brand name stuffed into an unrelated domain should flag"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG in check_subdomain_abuse: flags legitimate brand subdomains "
-        "(e.g. secure.fnb.co.za) because it only checks domain != real_domain "
-        "exactly, never domain.endswith('.' + real_domain). Every SA bank "
-        "that uses a subdomain for online banking will be flagged as abuse. "
-        "Fix: skip when domain == real_domain OR domain.endswith('.' + real_domain)."
-    ),
-)
 def test_subdomain_abuse_should_not_flag_legit_subdomain(msg_factory):
     msg = msg_factory('"FNB" <notifications@secure.fnb.co.za>')
     findings = check_subdomain_abuse(msg)
     assert findings == [], "secure.fnb.co.za is a legitimate FNB subdomain"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG in check_subdomain_abuse: brand keys that are common English "
-        "words ('rain', 'gems') false-positive on unrelated domains via "
-        "plain substring match, e.g. 'onlinetraininghub.co.za' contains "
-        "'rain'. Fix: require a word/label boundary, or drop short common-"
-        "word brand keys from substring-based checks."
-    ),
-)
 def test_subdomain_abuse_should_not_flag_common_word_collision(msg_factory):
-    msg = msg_factory('"Training Hub" <info@onlinetraininghub.co.za>')
+    msg = msg_factory('"Weather Alerts" <info@rainfall-alert.co.za>')
     findings = check_subdomain_abuse(msg)
-    assert findings == [], "'training' contains 'rain' but has nothing to do with rain.co.za"
+    assert findings == [], "'rainfall' starts with 'rain' but has nothing to do with rain.co.za"
 
 
 # ---------------------------------------------------------------------------
-# check_auth_results — includes one documented design gap (xfail)
+# check_auth_results
 # ---------------------------------------------------------------------------
 
 def test_auth_results_flags_spf_fail(msg_factory):
@@ -121,16 +94,6 @@ def test_auth_results_flags_spf_fail(msg_factory):
     assert findings, "SPF fail should be flagged"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DESIGN GAP, not yet implemented: a completely missing "
-        "Authentication-Results header currently scores 0. Prior review "
-        "recommended a small (~5pt) penalty for missing SPF/DKIM/DMARC "
-        "entirely, since SA institutions (banks, SARS, SASSA) publish "
-        "these records and legitimate mail should have the header present."
-    ),
-)
 def test_auth_results_missing_header_should_carry_some_risk(msg_factory):
     msg = msg_factory("notifications@fnb.co.za")  # no auth_results at all
     findings = check_auth_results(msg)

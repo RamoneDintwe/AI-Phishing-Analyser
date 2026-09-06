@@ -3,6 +3,7 @@ Shared fixtures for the AI Phishing Analyser test suite.
 """
 import email.message
 import email.policy
+
 import pytest
 
 

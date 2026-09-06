@@ -1,0 +1,15 @@
+From: "FNB Security Alert" <security@fnbsupport-login.com>
+To: target@example.com
+Subject: UREGENT: Verify your account immediately!
+Reply-To: hacker@evil-domain.ru
+Authentication-Results: spf=fail; dmarc=fail
+
+Dear Custormer,
+
+We detected unusual activity on your account. Your account will be closed within 24 hours if you do not verify your details.
+
+Please click here to update your security info:
+http://192.168.1.1/login/fnb
+
+Thank you,
+FNB Online Security

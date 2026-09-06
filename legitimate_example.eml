@@ -1,0 +1,12 @@
+From: "FNB" <notifications@fnb.co.za>
+To: customer@example.com
+Subject: Your July statement is ready
+Reply-To: notifications@fnb.co.za
+Authentication-Results: spf=pass; dkim=pass; dmarc=pass
+
+Dear Customer,
+
+Your FNB account statement for July is now available in the app.
+
+Thank you,
+FNB
